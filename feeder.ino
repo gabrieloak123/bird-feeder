@@ -1,12 +1,12 @@
 // https://wokwi.com/projects/399862282951045121
 
 #include <ESP32Servo.h>
-#include <HX711_ADC.h>
+#include <HX711.h>
 
 const int servoPin = 18;
 Servo servo;
 
-const int trigPin = 15;
+const int trigPin = 12;
 const int echoPin = 14;
 
 //define sound speed in cm/uS
@@ -17,15 +17,14 @@ float distanceCm;
 float distanceInch;
 
 // HX711 connection pins
-#define SCK  23  //SCK OUTPUT
-#define DT   22  //DT INPUT
+#define SCK  4  //SCK OUTPUT
+#define DT   16  //DT INPUT
 
 // General variables
-float preSetCalibValue = 1.0;  /* set your calibration value here */ 
 float weightInGramms;
-
+const float scale_calib = 419.8;
 // initialize
-HX711_ADC LoadCell(DT, SCK);
+HX711 scale;
 
 void setup() {
   Serial.begin(115200);
@@ -33,22 +32,10 @@ void setup() {
   pinMode(echoPin, INPUT);
 
   servo.attach(servoPin, 500, 2400);
-
-  //initialize loadcell
-  LoadCell.begin();
-  LoadCell.start(2000, true);  //stabilize and tare on start
-
+  
+  scale.begin(DT,SCK);
   delay(200);
-
-  Serial.println("\nInitializing LoadCell...");
-  if (LoadCell.getTareTimeoutFlag() || LoadCell.getSignalTimeoutFlag()) {
-    Serial.println("\nTimeout, check wiring for MCU <> HX711");
-    //while (1);
-  } else {
-    Serial.println("\nSetting CalFactor...");
-    LoadCell.setCalFactor(preSetCalibValue);  // set calibration value
-  }
-
+  
   Serial.println("\n-- READY --");
 }
 
@@ -66,27 +53,6 @@ void rotate_anticlockwise(int degrees) {
   }
 }
 
-float get_weight() {
-  static boolean newDataReady = false;
-  static float newWeigh = 0.0;
-
-  // Check for new data
-  if (LoadCell.update()) {
-    newDataReady = true;
-  }
-
-  // Get weight from the sensor
-  if (newDataReady) {
-    newWeigh = LoadCell.getData();
-    if (abs(newWeigh) < 20.0) {  // kill small fluctuation
-      newWeigh = 0.0;
-    }
-
-    newDataReady = false;
-  }
-
-  return newWeigh;
-}
 
 void loop() {
   // Clears the trigPin
@@ -102,17 +68,16 @@ void loop() {
   distanceCm = duration * SOUND_SPEED/2;
 
   // Update the current weight
+  scale.set_scale();
+  weightInGramms = scale.get_units(10)/scale_calib;
 
-  weightInGramms = get_weight();
+  Serial.print("Distance (cm): ");
+  Serial.println(distanceCm);
+  Serial.print("Weight (gramms): ");
+  Serial.println(weightInGramms);
 
-  if(distanceCm < 15 and weightInGramms < 200) {
-    Serial.print("Distance (cm): ");
-    Serial.println(distanceCm);
-    Serial.print("Weight (gramms): ");
-    Serial.println(weightInGramms);
-
-    rotate_clockwise(180);
-    rotate_anticlockwise(180);
-  }
+  rotate_clockwise(180);
+  rotate_anticlockwise(180);
+  
   delay(1000);
 }
